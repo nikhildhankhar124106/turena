@@ -1,0 +1,13 @@
+@echo off
+echo Starting backend server in background...
+start /B node server.js > server.log 2>&1
+
+echo Waiting for server to spin up...
+timeout /t 3 /nobreak > NUL
+
+echo Running test script...
+node testSocket.js > test_output.log 2>&1
+
+echo Cleaning up node processes...
+taskkill /F /IM node.exe > NUL 2>&1
+echo Done.
