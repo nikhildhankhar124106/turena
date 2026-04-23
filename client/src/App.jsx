@@ -4,7 +4,7 @@ import Grid from './components/Grid';
 import ProfileCard from './components/ProfileCard';
 import MatchmakingScreen from './components/MatchmakingScreen';
 
-const SERVER_URL = 'http://localhost:5000';
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 const generateFakeId = () => {
     const chars = 'abcdef0123456789';
