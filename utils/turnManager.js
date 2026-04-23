@@ -1,5 +1,6 @@
 const GameRoom = require('../models/GameRoom');
 const PlayerState = require('../models/PlayerState');
+const xpManager = require('./xpManager');
 const logger = require('./logger');
 
 class TurnManager {
@@ -70,8 +71,64 @@ class TurnManager {
                         nextPlayerState.abilityCooldowns.set(ability, cooldown - 1);
                     }
                 }
-                await nextPlayerState.save();
             }
+
+            // --- TURENA New Mechanics ---
+            let turnEvents = [];
+
+            // 1. Grid Shrinking (Danger Zone) - Every 8 turns
+            if (room.turnNumber % 8 === 0) {
+                const sz = room.safeZone;
+                if (sz.maxX - sz.minX >= 2 && sz.maxY - sz.minY >= 2) {
+                    sz.minX++;
+                    sz.maxX--;
+                    sz.minY++;
+                    sz.maxY--;
+                    turnEvents.push({ type: 'zoneShrink', safeZone: sz });
+                }
+            }
+
+            // 2. Mystery Box Logic - Spawn every 6 turns, disappears after 6 turns
+            if (room.mysteryBox && room.mysteryBox.activeTurnsLeft > 0) {
+                room.mysteryBox.activeTurnsLeft--;
+                if (room.mysteryBox.activeTurnsLeft === 0) {
+                    room.mysteryBox.x = null;
+                    room.mysteryBox.y = null;
+                    room.mysteryBox.powerType = null;
+                    turnEvents.push({ type: 'boxDespawn' });
+                }
+            }
+            if ((!room.mysteryBox || room.mysteryBox.activeTurnsLeft <= 0) && room.turnNumber % 3 === 0) {
+                const sz = room.safeZone;
+                const powers = ['create_wall', 'sniper', 'high_jump', 'bullet_vest', 'health_kit'];
+                const pType = powers[Math.floor(Math.random() * powers.length)];
+                room.mysteryBox = {
+                    x: Math.floor(Math.random() * (sz.maxX - sz.minX + 1)) + sz.minX,
+                    y: Math.floor(Math.random() * (sz.maxY - sz.minY + 1)) + sz.minY,
+                    powerType: pType,
+                    activeTurnsLeft: 6
+                };
+                turnEvents.push({ type: 'boxSpawn', mysteryBox: room.mysteryBox });
+            }
+
+            let alivePlayers = [];
+            // 3. Auto-Death Check
+            for (const p of room.players) {
+                const pState = await PlayerState.findById(p.playerState._id);
+                if (pState.hp > 0) {
+                    const outOfBounds = pState.position.x < room.safeZone.minX || pState.position.x > room.safeZone.maxX || pState.position.y < room.safeZone.minY || pState.position.y > room.safeZone.maxY;
+                    if (outOfBounds) {
+                        pState.hp = 0;
+                        pState.isAlive = false;
+                        await pState.save();
+                        io.to(room.roomId).emit('playerHit', { targetId: p.user, newHp: 0, reason: 'danger_zone' });
+                    } else {
+                        alivePlayers.push(p.user);
+                    }
+                }
+            }
+
+            if (nextPlayerState) await nextPlayerState.save();
 
             // Set new endsAt time
             const durationMs = 30000;
@@ -82,8 +139,47 @@ class TurnManager {
             io.to(room.roomId).emit('turnChanged', {
                 currentTurn: room.currentTurn,
                 turnNumber: room.turnNumber,
-                turnTimerEndsAt: room.turnTimerEndsAt
+                turnTimerEndsAt: room.turnTimerEndsAt,
+                events: turnEvents
             });
+
+            // 4. Game Over evaluation
+            if (alivePlayers.length <= 1) {
+                room.status = 'finished';
+                const winnerId = alivePlayers.length === 1 ? alivePlayers[0] : null;
+                room.winner = winnerId;
+                await room.save();
+                this.clearTurnTimer(room.roomId);
+
+                let xpDetails = { winnerXpGained: 0, loserXpGained: 0 };
+                if (winnerId) {
+                    const loserId = room.players.find(p => p.user.toString() !== winnerId.toString())?.user;
+                    if (loserId) {
+                        xpDetails = await xpManager.awardMatchXP(winnerId.toString(), loserId.toString());
+                    }
+                }
+
+                const MatchHistory = require('../models/MatchHistory');
+                const matchHistory = new MatchHistory({
+                    roomId: room.roomId,
+                    players: room.players.map(p => p.user),
+                    winner: winnerId,
+                    durationSeconds: Math.floor((Date.now() - new Date(room.createdAt).getTime()) / 1000),
+                    totalTurns: room.turnNumber,
+                    endedAt: new Date(),
+                    winnerXpGained: xpDetails.winnerXpGained,
+                    loserXpGained: xpDetails.loserXpGained,
+                    winnerLevel: xpDetails.winnerLevel,
+                    loserLevel: xpDetails.loserLevel
+                });
+                await matchHistory.save().catch(err => logger.error('Error saving match', err));
+
+                io.to(room.roomId).emit('gameOver', { winner: winnerId, reason: 'Danger Zone Elimination' });
+                if (winnerId) {
+                   io.to(room.roomId).emit('xpAwarded', xpDetails);
+                }
+                return;
+            }
 
             // Start a new timer
             this.startTurnTimer(io, room.roomId, durationMs);

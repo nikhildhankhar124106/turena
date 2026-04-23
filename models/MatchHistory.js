@@ -29,6 +29,20 @@ const matchHistorySchema = new mongoose.Schema(
             type: Date,
             default: Date.now,
         },
+        winnerXpGained: {
+            type: Number,
+            default: 0,
+        },
+        loserXpGained: {
+            type: Number,
+            default: 0,
+        },
+        winnerLevel: {
+            type: Number,
+        },
+        loserLevel: {
+            type: Number,
+        },
     },
     { timestamps: true }
 );

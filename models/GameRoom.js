@@ -23,6 +23,24 @@ const gameRoomSchema = new mongoose.Schema(
             rows: { type: Number, default: 10 },
             cols: { type: Number, default: 10 },
         },
+        safeZone: {
+            minX: { type: Number, default: 0 },
+            maxX: { type: Number, default: 9 },
+            minY: { type: Number, default: 0 },
+            maxY: { type: Number, default: 9 },
+        },
+        mysteryBox: {
+            x: { type: Number, default: null },
+            y: { type: Number, default: null },
+            powerType: { type: String, default: null },
+            activeTurnsLeft: { type: Number, default: 0 }
+        },
+        walls: [
+            {
+                x: { type: Number, required: true },
+                y: { type: Number, required: true }
+            }
+        ],
         currentTurn: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'PlayerState',

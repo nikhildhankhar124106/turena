@@ -8,6 +8,8 @@ const User = require('../models/User');
 const MatchHistory = require('../models/MatchHistory');
 
 const turnManager = require('../utils/turnManager');
+const matchmaking = require('./matchmaking');
+const xpManager = require('../utils/xpManager');
 const { validateMove, validateAttack } = require('../utils/gameLogic');
 
 /**
@@ -15,8 +17,22 @@ const { validateMove, validateAttack } = require('../utils/gameLogic');
  * @param {import('socket.io').Server} io
  */
 const initSocket = (io) => {
+    // Start the matchmaking loop for this server instance
+    matchmaking.start(io);
+
     io.on('connection', (socket) => {
-        logger.info(`⚡ Socket connected: ${socket.id}`);
+        logger.info(` Socket connected: ${socket.id}`);
+
+        // ── Matchmaking Queue ─────────────────────────────────────────────
+        socket.on('joinQueue', ({ userId }) => {
+            if (!userId) return socket.emit('gameError', { message: 'User ID required' });
+            matchmaking.addToQueue(socket, userId);
+        });
+
+        socket.on('leaveQueue', ({ userId }) => {
+            if (!userId) return;
+            matchmaking.removeFromQueue(userId);
+        });
 
         // ── Create a game room ────────────────────────────────────────────
         socket.on('createRoom', async ({ userId }) => {
@@ -175,19 +191,43 @@ const initSocket = (io) => {
 
                 // 2. Action validation
                 if (action === 'move') {
-                    // Maximum 3 tiles distance
-                    if (!validateMove(playerState.position, targetPos)) {
-                        return socket.emit('gameError', { message: 'Invalid move distance.' });
+                    // Maximum 3 tiles distance normally (or 6 for high_jump)
+                    if (!validateMove(playerState.position, targetPos, playerState.activePower, room.walls)) {
+                        return socket.emit('gameError', { message: 'Invalid move.' });
                     }
 
                     // Update position
                     playerState.position = targetPos;
+                    
+                    if (playerState.activePower === 'high_jump') {
+                        playerState.activePower = null; // Expires after one use
+                    }
+
+                    // Mystery Box Pickup
+                    if (room.mysteryBox && room.mysteryBox.x === targetPos.x && room.mysteryBox.y === targetPos.y && room.mysteryBox.powerType) {
+                        const collectedPower = room.mysteryBox.powerType;
+                        if (collectedPower === 'health_kit') {
+                            playerState.hp = 100; // Insta heal
+                        } else {
+                            playerState.activePower = collectedPower;
+                        }
+                        room.mysteryBox.activeTurnsLeft = 0; // consumed
+                        room.mysteryBox.powerType = null;
+                        io.to(roomId).emit('boxCollected', { userId, power: collectedPower });
+                    }
+
                     await playerState.save();
 
                 } else if (action === 'attack') {
-                    // Adjacent tile only
-                    if (!validateAttack(playerState.position, targetPos)) {
+                    // Adjacent tile only normally (or 5 for sniper)
+                    if (!validateAttack(playerState.position, targetPos, playerState.activePower)) {
                         return socket.emit('gameError', { message: 'Target out of range.' });
+                    }
+                    let isSniperShot = false;
+                    if (playerState.activePower === 'sniper') {
+                        isSniperShot = true;
+                        playerState.activePower = null; // Expires after one use
+                        await playerState.save();
                     }
 
                     // Find if there is an opponent at targetPos
@@ -199,7 +239,13 @@ const initSocket = (io) => {
 
                     if (opponentRecord) {
                         const opponentState = opponentRecord.playerState;
-                        const damage = 20; // Default or calculate based on skills
+                        let damage = isSniperShot ? 50 : 20; // Default or calculate based on skills
+                        
+                        if (opponentState.activePower === 'bullet_vest') {
+                            damage = 10;
+                            opponentState.activePower = null; // Expires after absorbing a hit
+                        }
+
                         opponentState.hp = Math.max(0, opponentState.hp - damage);
                         if (opponentState.hp === 0) {
                             opponentState.isAlive = false;
@@ -211,17 +257,28 @@ const initSocket = (io) => {
 
                             // Save MatchHistory record
                             const durationSeconds = Math.floor((Date.now() - new Date(room.createdAt).getTime()) / 1000);
+                            
+                            // Award XP and calculate gains
+                            const xpDetails = await xpManager.awardMatchXP(userId, opponentRecord.user.toString());
+                            
                             const matchHistory = new MatchHistory({
                                 roomId: room.roomId,
                                 players: room.players.map(p => p.user),
                                 winner: userId,
                                 durationSeconds,
                                 totalTurns: room.turnNumber,
-                                endedAt: new Date()
+                                endedAt: new Date(),
+                                winnerXpGained: xpDetails.winnerXpGained,
+                                loserXpGained: xpDetails.loserXpGained,
+                                winnerLevel: xpDetails.winnerLevel,
+                                loserLevel: xpDetails.loserLevel
                             });
                             await matchHistory.save().catch(err => logger.error('Error saving match history', err));
 
                             io.to(roomId).emit('gameOver', { winner: userId, reason: 'Opponent defeated' });
+                            
+                            // Send individual XP results
+                            io.to(roomId).emit('xpAwarded', xpDetails);
                         }
                         await opponentState.save();
 
@@ -235,6 +292,36 @@ const initSocket = (io) => {
                     } else {
                         // Attack missed / empty tile
                         socket.emit('gameWarning', { message: 'Attack missed, no target at location' });
+                    }
+                } else if (action === 'usePower') {
+                    if (playerState.activePower === 'create_wall') {
+                        const wallTiles = [
+                            { x: x - 1, y },
+                            { x, y },
+                            { x: x + 1, y }
+                        ];
+                        let placedWalls = [];
+                        for (const tile of wallTiles) {
+                            if (tile.x >= 0 && tile.x < 10 && tile.y >= 0 && tile.y < 10) {
+                                const isOccupied = room.players.some(p => p.playerState.position.x === tile.x && p.playerState.position.y === tile.y && p.playerState.hp > 0);
+                                const isWall = room.walls.some(w => w.x === tile.x && w.y === tile.y);
+                                if (!isOccupied && !isWall) {
+                                    room.walls.push(tile);
+                                    placedWalls.push(tile);
+                                }
+                            }
+                        }
+
+                        if (placedWalls.length > 0) {
+                            playerState.activePower = null; // Consume power
+                            await playerState.save();
+                            await room.save();
+                            placedWalls.forEach(w => io.to(roomId).emit('wallCreated', w));
+                        } else {
+                            return socket.emit('gameError', { message: 'Cannot place wall here.' });
+                        }
+                    } else {
+                        return socket.emit('gameError', { message: 'No applicable power to use directly on tile.' });
                     }
                 } else {
                     return socket.emit('gameError', { message: 'Unknown action' });
@@ -255,6 +342,27 @@ const initSocket = (io) => {
             }
         });
 
+        // ── Choose Initial Power ──────────────────────────────────────────────
+        socket.on('chooseInitialPower', async ({ roomId, userId, power }) => {
+            try {
+                const room = await GameRoom.findOne({ roomId }).populate('players.playerState');
+                if (!room || room.status !== 'playing') {
+                    return socket.emit('gameError', { message: 'Invalid or inactive room' });
+                }
+                const playerRecord = room.players.find(p => p.user.toString() === userId);
+                if (playerRecord) {
+                    const playerState = playerRecord.playerState;
+                    if (!playerState.activePower) {
+                        playerState.activePower = power;
+                        await playerState.save();
+                        io.to(roomId).emit('powerChosen', { userId, power });
+                    }
+                }
+            } catch (error) {
+                logger.error(`Error choosing power: ${error.message}`);
+            }
+        });
+
         // ── Leave a game room ───────────────────────────────────────────
         socket.on('leaveRoom', ({ roomId, userId }) => {
             socket.leave(roomId);
@@ -265,7 +373,8 @@ const initSocket = (io) => {
 
         // ── Disconnect ──────────────────────────────────────────────────
         socket.on('disconnect', () => {
-            logger.info(`🔌 Socket disconnected: ${socket.id}`);
+            logger.info(` Socket disconnected: ${socket.id}`);
+            matchmaking.removeBySocketId(socket.id);
         });
     });
 };

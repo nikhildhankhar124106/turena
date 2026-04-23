@@ -13,22 +13,57 @@ const COLORS = {
     player1: '#38bdf8',
     player2: '#fbbf24',
     text: '#ffffff',
-    hpBackground: 'rgba(0, 0, 0, 0.6)'
+    hpBackground: 'rgba(0, 0, 0, 0.6)',
+    dangerZone: 'rgba(255, 0, 0, 0.2)',
+    warningZone: 'rgba(255, 165, 0, 0.4)',
+    wall: '#4b5563',
+    mysteryBox: 'rgba(250, 204, 21, 0.8)'
 };
 
-const Grid = ({ gameState, myPlayerId, onAction, floatingTexts }) => {
+const Grid = ({ gameState, myPlayerId, onAction, floatingTexts, powerMode }) => {
     const canvasRef = useRef(null);
 
     const drawGrid = (ctx) => {
         ctx.fillStyle = COLORS.background;
         ctx.fillRect(0, 0, GRID_COLS * CELL_SIZE, GRID_ROWS * CELL_SIZE);
 
-        const { players, currentTurn } = gameState;
+        const { players, currentTurn, safeZone, mysteryBox, walls } = gameState;
         const isMyTurn = currentTurn === myPlayerId;
         const myPlayer = players.find(p => p.id === myPlayerId);
 
         for (let r = 0; r < GRID_ROWS; r++) {
             for (let c = 0; c < GRID_COLS; c++) {
+                const shrinkWarning = gameState.turnNumber % 8 === 6 || gameState.turnNumber % 8 === 7;
+                // Danger Zone check
+                const isDanger = c < safeZone.minX || c > safeZone.maxX || r < safeZone.minY || r > safeZone.maxY;
+                const isWarning = !isDanger && shrinkWarning && (c === safeZone.minX || c === safeZone.maxX || r === safeZone.minY || r === safeZone.maxY);
+
+                if (isDanger) {
+                    ctx.fillStyle = COLORS.dangerZone;
+                    ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                } else if (isWarning) {
+                    ctx.fillStyle = COLORS.warningZone;
+                    ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+
+                // Walls
+                const isWall = walls?.find(w => w.x === c && w.y === r);
+                if (isWall) {
+                    ctx.fillStyle = COLORS.wall;
+                    ctx.fillRect(c * CELL_SIZE + 4, r * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+                }
+
+                // Mystery Box
+                if (mysteryBox && mysteryBox.x === c && mysteryBox.y === r) {
+                    ctx.fillStyle = COLORS.mysteryBox;
+                    ctx.fillRect(c * CELL_SIZE + 10, r * CELL_SIZE + 10, CELL_SIZE - 20, CELL_SIZE - 20);
+                    ctx.fillStyle = COLORS.text;
+                    ctx.font = '12px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🎁', c * CELL_SIZE + CELL_SIZE / 2, r * CELL_SIZE + CELL_SIZE / 2);
+                }
+
                 const enemy = players.find(
                     p => p.id !== myPlayerId && p.pos.x === c && p.pos.y === r && p.hp > 0
                 );
@@ -37,12 +72,19 @@ const Grid = ({ gameState, myPlayerId, onAction, floatingTexts }) => {
                 );
 
                 if (isMyTurn && myPlayer && myPlayer.hp > 0) {
-                    if (enemy && isValidAttack(myPlayer.pos, c, r)) {
-                        ctx.fillStyle = COLORS.validAttack;
-                        ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-                    } else if (!obstacle && isValidMove(myPlayer.pos, c, r)) {
-                        ctx.fillStyle = COLORS.validMove;
-                        ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    if (powerMode) {
+                        if (!obstacle && !isWall && !isDanger) {
+                            ctx.fillStyle = COLORS.validMove;
+                            ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                        }
+                    } else {
+                        if (enemy && isValidAttack(myPlayer.pos, c, r, myPlayer.activePower)) {
+                            ctx.fillStyle = COLORS.validAttack;
+                            ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                        } else if (!obstacle && isValidMove(myPlayer.pos, c, r, myPlayer.activePower, walls)) {
+                            ctx.fillStyle = COLORS.validMove;
+                            ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                        }
                     }
                 }
 
@@ -92,7 +134,7 @@ const Grid = ({ gameState, myPlayerId, onAction, floatingTexts }) => {
     }, [gameState, myPlayerId]);
 
     const handleCanvasClick = (e) => {
-        const { currentTurn, players } = gameState;
+        const { currentTurn, players, safeZone, walls } = gameState;
         if (currentTurn !== myPlayerId) return;
 
         const myPlayer = players.find(p => p.id === myPlayerId);
@@ -109,13 +151,22 @@ const Grid = ({ gameState, myPlayerId, onAction, floatingTexts }) => {
         if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return;
 
         const obstacle = players.find(p => p.pos.x === col && p.pos.y === row && p.hp > 0);
+        const isWall = walls?.find(w => w.x === col && w.y === row);
+        const isDanger = col < safeZone.minX || col > safeZone.maxX || row < safeZone.minY || row > safeZone.maxY;
+
+        if (powerMode) {
+            if (!obstacle && !isWall && !isDanger) {
+                onAction('usePower', col, row);
+            }
+            return;
+        }
 
         if (obstacle) {
-            if (obstacle.id !== myPlayerId && isValidAttack(myPlayer.pos, col, row)) {
+            if (obstacle.id !== myPlayerId && isValidAttack(myPlayer.pos, col, row, myPlayer.activePower)) {
                 onAction('attack', col, row);
             }
         } else {
-            if (isValidMove(myPlayer.pos, col, row)) {
+            if (isValidMove(myPlayer.pos, col, row, myPlayer.activePower, walls)) {
                 onAction('move', col, row);
             }
         }

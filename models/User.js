@@ -37,6 +37,26 @@ const userSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
+        xp: {
+            type: Number,
+            default: 0,
+        },
+        level: {
+            type: Number,
+            default: 1,
+        },
+        xpToNextLvl: {
+            type: Number,
+            default: 100,
+        },
+        title: {
+            type: String,
+            default: 'Recruit',
+        },
+        avatarUrl: {
+            type: String,
+            default: null,
+        },
     },
     { timestamps: true }
 );

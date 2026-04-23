@@ -8,28 +8,72 @@ const getDistance = (pos1, pos2) => {
     return Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
 };
 
+const getBfsDistance = (startPos, targetPos, walls = []) => {
+    if (startPos.x === targetPos.x && startPos.y === targetPos.y) return 0;
+    const queue = [{ x: startPos.x, y: startPos.y, dist: 0 }];
+    const visited = new Set();
+    visited.add(`${startPos.x},${startPos.y}`);
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (current.x === targetPos.x && current.y === targetPos.y) return current.dist;
+
+        // Limiting search arbitrarily to keep it fast
+        if (current.dist >= 15) continue;
+
+        const neighbors = [
+            { x: current.x + 1, y: current.y },
+            { x: current.x - 1, y: current.y },
+            { x: current.x, y: current.y + 1 },
+            { x: current.x, y: current.y - 1 }
+        ];
+
+        for (const n of neighbors) {
+            const isWall = walls.some(w => w.x === n.x && w.y === n.y);
+            const key = `${n.x},${n.y}`;
+            if (!isWall && !visited.has(key)) {
+                visited.add(key);
+                queue.push({ x: n.x, y: n.y, dist: current.dist + 1 });
+            }
+        }
+    }
+    return Infinity;
+};
+
 /**
  * Validate a move action
  * @param {Object} currentPos {x, y}
  * @param {Object} targetPos {x, y}
+ * @param {string} activePower
+ * @param {Array} walls
  * @returns {boolean}
  */
-const validateMove = (currentPos, targetPos) => {
-    const distance = getDistance(currentPos, targetPos);
-    // Max 3 tiles distance
-    return distance >= 1 && distance <= 3;
+const validateMove = (currentPos, targetPos, activePower, walls = []) => {
+    // Check if target is a wall
+    const isWall = walls.some(w => w.x === targetPos.x && w.y === targetPos.y);
+    if (isWall) return false;
+
+    if (activePower === 'high_jump') {
+        const distance = getDistance(currentPos, targetPos);
+        return distance >= 1 && distance <= 6;
+    }
+
+    const pathDistance = getBfsDistance(currentPos, targetPos, walls);
+    return pathDistance >= 1 && pathDistance <= 3;
 };
 
 /**
  * Validate an attack action
  * @param {Object} currentPos {x, y}
  * @param {Object} targetPos {x, y}
+ * @param {string} activePower
  * @returns {boolean}
  */
-const validateAttack = (currentPos, targetPos) => {
+const validateAttack = (currentPos, targetPos, activePower) => {
     const distance = getDistance(currentPos, targetPos);
-    // Adjacent tile only
-    return distance === 1;
+    // Adjacent tile only normally, 5 for sniper
+    const maxDistance = activePower === 'sniper' ? 5 : 1;
+    return distance >= 1 && distance <= maxDistance;
 };
 
 module.exports = {
