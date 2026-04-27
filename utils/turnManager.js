@@ -112,16 +112,21 @@ class TurnManager {
             }
 
             // 2.5 Random Powers every 5 turns for those without power
-            if (room.turnNumber % 5 === 0) {
-                const powers = ['create_wall', 'sniper', 'high_jump', 'bullet_vest'];
-                for (const p of room.players) {
-                    const pState = await PlayerState.findById(p.playerState._id);
-                    if (pState.hp > 0 && !pState.activePower) {
-                        pState.activePower = powers[Math.floor(Math.random() * powers.length)];
-                        await pState.save();
-                        turnEvents.push({ type: 'powerGranted', userId: p.user.toString(), power: pState.activePower });
+            try {
+                if (room.turnNumber % 5 === 0) {
+                    const powers = ['create_wall', 'sniper', 'high_jump', 'bullet_vest'];
+                    for (const p of room.players) {
+                        const pState = await PlayerState.findById(p.playerState._id);
+                        if (pState && pState.hp > 0 && !pState.activePower) {
+                            pState.activePower = powers[Math.floor(Math.random() * powers.length)];
+                            await pState.save();
+                            const uidStr = p.user._id ? p.user._id.toString() : p.user.toString();
+                            turnEvents.push({ type: 'powerGranted', userId: uidStr, power: pState.activePower });
+                        }
                     }
                 }
+            } catch (err) {
+                logger.error(`[DEBUG] Error in random powers logic: ${err.message}`);
             }
 
             let alivePlayers = [];
