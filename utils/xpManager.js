@@ -19,25 +19,8 @@ function getTitleForLevel(level) {
  * @returns {{ winnerXp: number, loserXp: number }}
  */
 function calculateXP(winnerLevel, loserLevel) {
-    const BASE_WINNER_XP = 50;
-    const BASE_LOSER_XP = 10;
-    const levelDiff = loserLevel - winnerLevel;
-
-    let winnerXp = BASE_WINNER_XP;
-    if (levelDiff > 0) {
-        // Beating a higher-level player → bonus
-        winnerXp += levelDiff * 15;
-    } else if (levelDiff < 0) {
-        // Beating a lower-level player → penalty (min 20 XP)
-        winnerXp = Math.max(20, winnerXp + levelDiff * 5);
-    }
-
-    // Loser always gets participation XP + small bonus for fighting higher-level
-    let loserXp = BASE_LOSER_XP;
-    if (winnerLevel > loserLevel) {
-        loserXp += Math.min(5, winnerLevel - loserLevel) * 2;
-    }
-
+    const winnerXp = 50;
+    const loserXp = 10;
     return { winnerXp, loserXp };
 }
 
@@ -48,14 +31,15 @@ function calculateXP(winnerLevel, loserLevel) {
  * @returns {{ leveledUp: boolean, newLevel: number, newTitle: string }}
  */
 function applyXP(user, xpGained) {
+    user.level = user.level || 1;
+    user.xp = (user.xp || 0) + xpGained;
+    user.xpToNextLvl = 100;
     const oldLevel = user.level;
-    user.xp += xpGained;
 
     let leveledUp = false;
     while (user.xp >= user.xpToNextLvl) {
         user.xp -= user.xpToNextLvl;
         user.level += 1;
-        user.xpToNextLvl = 100 * user.level;
         leveledUp = true;
     }
 

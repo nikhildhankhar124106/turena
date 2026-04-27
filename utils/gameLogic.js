@@ -55,7 +55,7 @@ const validateMove = (currentPos, targetPos, activePower, walls = []) => {
 
     if (activePower === 'high_jump') {
         const distance = getDistance(currentPos, targetPos);
-        return distance >= 1 && distance <= 6;
+        return distance >= 1 && distance <= 5;
     }
 
     const pathDistance = getBfsDistance(currentPos, targetPos, walls);

@@ -111,6 +111,19 @@ class TurnManager {
                 turnEvents.push({ type: 'boxSpawn', mysteryBox: room.mysteryBox });
             }
 
+            // 2.5 Random Powers every 5 turns for those without power
+            if (room.turnNumber % 5 === 0) {
+                const powers = ['create_wall', 'sniper', 'high_jump', 'bullet_vest'];
+                for (const p of room.players) {
+                    const pState = await PlayerState.findById(p.playerState._id);
+                    if (pState.hp > 0 && !pState.activePower) {
+                        pState.activePower = powers[Math.floor(Math.random() * powers.length)];
+                        await pState.save();
+                        turnEvents.push({ type: 'powerGranted', userId: p.user.toString(), power: pState.activePower });
+                    }
+                }
+            }
+
             let alivePlayers = [];
             // 3. Auto-Death Check
             for (const p of room.players) {

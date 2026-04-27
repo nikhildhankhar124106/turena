@@ -40,7 +40,7 @@ export const isValidMove = (playerPos, targetX, targetY, activePower, walls = []
 
     if (activePower === 'high_jump') {
         const dist = getManhattanDistance(playerPos.x, playerPos.y, targetX, targetY);
-        return dist >= 1 && dist <= 6;
+        return dist >= 1 && dist <= 5;
     }
 
     const pathDist = getBfsDistance(playerPos.x, playerPos.y, targetX, targetY, walls);

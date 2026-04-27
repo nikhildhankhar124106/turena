@@ -170,6 +170,10 @@ const App = () => {
                         if (evt.type === 'zoneShrink') updatedPrev.safeZone = evt.safeZone;
                         if (evt.type === 'boxSpawn') updatedPrev.mysteryBox = evt.mysteryBox;
                         if (evt.type === 'boxDespawn') updatedPrev.mysteryBox = null;
+                        if (evt.type === 'powerGranted') {
+                            const pToUpdate = updatedPrev.players.find(p => p.id === evt.userId);
+                            if (pToUpdate) pToUpdate.activePower = evt.power;
+                        }
                     });
                 }
                 
@@ -221,13 +225,16 @@ const App = () => {
             
             // Update local mock profile stats based on outcome
             setMyProfile(prev => {
+                if (!prev) return prev;
                 const isWinner = xpDetails.winnerXpGained > 0 && matchResult !== 'loss'; // rough check
-                // This is a simplification; in a real app, you fetch updated profile from API here
                 return {
                     ...prev,
-                    gamesPlayed: prev.gamesPlayed + 1,
-                    winCount: prev.winCount + (isWinner ? 1 : 0),
-                    xp: prev.xp + (isWinner ? xpDetails.winnerXpGained : xpDetails.loserXpGained),
+                    gamesPlayed: (prev.gamesPlayed || 0) + 1,
+                    winCount: (prev.winCount || 0) + (isWinner ? 1 : 0),
+                    xp: isWinner ? xpDetails.winnerXp : xpDetails.loserXp,
+                    level: isWinner ? xpDetails.winnerLevel : xpDetails.loserLevel,
+                    xpToNextLvl: isWinner ? xpDetails.winnerXpToNext : xpDetails.loserXpToNext,
+                    title: isWinner ? xpDetails.winnerTitle : xpDetails.loserTitle
                 };
             });
         });
