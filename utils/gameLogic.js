@@ -69,11 +69,31 @@ const validateMove = (currentPos, targetPos, activePower, walls = []) => {
  * @param {string} activePower
  * @returns {boolean}
  */
-const validateAttack = (currentPos, targetPos, activePower) => {
+const validateAttack = (currentPos, targetPos, activePower, walls = []) => {
     const distance = getDistance(currentPos, targetPos);
-    // Adjacent tile only normally, 5 for sniper
     const maxDistance = activePower === 'sniper' ? 5 : 1;
-    return distance >= 1 && distance <= maxDistance;
+    
+    if (distance < 1 || distance > maxDistance) return false;
+
+    if (activePower === 'sniper') {
+        if (currentPos.x !== targetPos.x && currentPos.y !== targetPos.y) {
+            return false;
+        }
+        const minX = Math.min(currentPos.x, targetPos.x);
+        const maxX = Math.max(currentPos.x, targetPos.x);
+        const minY = Math.min(currentPos.y, targetPos.y);
+        const maxY = Math.max(currentPos.y, targetPos.y);
+
+        for (const wall of walls) {
+            if (currentPos.y === targetPos.y && wall.y === currentPos.y) {
+                if (wall.x > minX && wall.x < maxX) return false;
+            }
+            if (currentPos.x === targetPos.x && wall.x === currentPos.x) {
+                if (wall.y > minY && wall.y < maxY) return false;
+            }
+        }
+    }
+    return true;
 };
 
 module.exports = {

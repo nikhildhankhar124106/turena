@@ -232,6 +232,7 @@ const initSocket = (io) => {
                             playerState.hp = 100; // Insta heal
                         } else {
                             playerState.activePower = collectedPower;
+                            playerState.activePowerTurnsLeft = 3;
                         }
                         room.mysteryBox.activeTurnsLeft = 0; // consumed
                         room.mysteryBox.powerType = null;
@@ -242,7 +243,7 @@ const initSocket = (io) => {
 
                 } else if (action === 'attack') {
                     // Adjacent tile only normally (or 5 for sniper)
-                    if (!validateAttack(playerState.position, targetPos, playerState.activePower)) {
+                    if (!validateAttack(playerState.position, targetPos, playerState.activePower, room.walls)) {
                         return socket.emit('gameError', { message: 'Target out of range.' });
                     }
                     let isSniperShot = false;
@@ -261,7 +262,7 @@ const initSocket = (io) => {
 
                     if (opponentRecord) {
                         const opponentState = opponentRecord.playerState;
-                        let damage = isSniperShot ? 50 : 20; // Default or calculate based on skills
+                        let damage = isSniperShot ? 30 : 20; // Default or calculate based on skills
                         
                         if (opponentState.activePower === 'bullet_vest') {
                             damage = 10;
@@ -377,6 +378,7 @@ const initSocket = (io) => {
                     const playerState = playerRecord.playerState;
                     if (!playerState.activePower) {
                         playerState.activePower = power;
+                        playerState.activePowerTurnsLeft = 3;
                         await playerState.save();
                         io.to(roomId).emit('powerChosen', { userId, power });
                     }

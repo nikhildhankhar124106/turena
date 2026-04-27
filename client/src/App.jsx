@@ -174,6 +174,10 @@ const App = () => {
                             const pToUpdate = updatedPrev.players.find(p => p.id === evt.userId);
                             if (pToUpdate) pToUpdate.activePower = evt.power;
                         }
+                        if (evt.type === 'powerExpired') {
+                            const pToUpdate = updatedPrev.players.find(p => p.id === evt.userId);
+                            if (pToUpdate) pToUpdate.activePower = null;
+                        }
                     });
                 }
                 

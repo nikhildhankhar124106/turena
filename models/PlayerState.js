@@ -29,6 +29,10 @@ const playerStateSchema = new mongoose.Schema(
             type: String,
             default: null, // e.g., 'create_wall', 'sniper', 'high_jump', 'bullet_vest'
         },
+        activePowerTurnsLeft: {
+            type: Number,
+            default: 0,
+        },
         maxHp: {
             type: Number,
             default: 100,

@@ -78,7 +78,7 @@ const Grid = ({ gameState, myPlayerId, onAction, floatingTexts, powerMode }) => 
                             ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                         }
                     } else {
-                        if (enemy && isValidAttack(myPlayer.pos, c, r, myPlayer.activePower)) {
+                        if (enemy && isValidAttack(myPlayer.pos, c, r, myPlayer.activePower, walls)) {
                             ctx.fillStyle = COLORS.validAttack;
                             ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                         } else if (!obstacle && isValidMove(myPlayer.pos, c, r, myPlayer.activePower, walls)) {
@@ -162,7 +162,7 @@ const Grid = ({ gameState, myPlayerId, onAction, floatingTexts, powerMode }) => 
         }
 
         if (obstacle) {
-            if (obstacle.id !== myPlayerId && isValidAttack(myPlayer.pos, col, row, myPlayer.activePower)) {
+            if (obstacle.id !== myPlayerId && isValidAttack(myPlayer.pos, col, row, myPlayer.activePower, walls)) {
                 onAction('attack', col, row);
             }
         } else {

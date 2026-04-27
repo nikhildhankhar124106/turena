@@ -119,6 +119,7 @@ class TurnManager {
                         const pState = await PlayerState.findById(p.playerState._id);
                         if (pState && pState.hp > 0 && !pState.activePower) {
                             pState.activePower = powers[Math.floor(Math.random() * powers.length)];
+                            pState.activePowerTurnsLeft = 3;
                             await pState.save();
                             const uidStr = p.user._id ? p.user._id.toString() : p.user.toString();
                             turnEvents.push({ type: 'powerGranted', userId: uidStr, power: pState.activePower });
@@ -146,7 +147,18 @@ class TurnManager {
                 }
             }
 
-            if (nextPlayerState) await nextPlayerState.save();
+            if (nextPlayerState) {
+                if (nextPlayerState.activePower && nextPlayerState.activePowerTurnsLeft > 0) {
+                    nextPlayerState.activePowerTurnsLeft -= 1;
+                    if (nextPlayerState.activePowerTurnsLeft <= 0) {
+                        const expiredPower = nextPlayerState.activePower;
+                        nextPlayerState.activePower = null;
+                        const uidStr = room.players[nextIndex].user._id ? room.players[nextIndex].user._id.toString() : room.players[nextIndex].user.toString();
+                        turnEvents.push({ type: 'powerExpired', userId: uidStr, power: expiredPower });
+                    }
+                }
+                await nextPlayerState.save();
+            }
 
             // Set new endsAt time
             const durationMs = 30000;

@@ -47,10 +47,29 @@ export const isValidMove = (playerPos, targetX, targetY, activePower, walls = []
     return pathDist >= 1 && pathDist <= 3;
 };
 
-export const isValidAttack = (playerPos, targetX, targetY, activePower) => {
+export const isValidAttack = (playerPos, targetX, targetY, activePower, walls = []) => {
     if (!playerPos) return false;
     const dist = getManhattanDistance(playerPos.x, playerPos.y, targetX, targetY);
-    // Exactly 1 tile horizontally/vertically normally, 5 for sniper
     const maxDist = activePower === 'sniper' ? 5 : 1;
-    return dist >= 1 && dist <= maxDist;
+    
+    if (dist < 1 || dist > maxDist) return false;
+
+    if (activePower === 'sniper') {
+        if (playerPos.x !== targetX && playerPos.y !== targetY) return false;
+        
+        const minX = Math.min(playerPos.x, targetX);
+        const maxX = Math.max(playerPos.x, targetX);
+        const minY = Math.min(playerPos.y, targetY);
+        const maxY = Math.max(playerPos.y, targetY);
+
+        for (const wall of walls) {
+            if (playerPos.y === targetY && wall.y === playerPos.y) {
+                if (wall.x > minX && wall.x < maxX) return false;
+            }
+            if (playerPos.x === targetX && wall.x === playerPos.x) {
+                if (wall.y > minY && wall.y < maxY) return false;
+            }
+        }
+    }
+    return true;
 };
