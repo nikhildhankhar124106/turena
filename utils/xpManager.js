@@ -69,6 +69,8 @@ async function awardMatchXP(winnerId, loserId) {
         if (!winner || !loser) {
             logger.warn(`XP award skipped: winner=${!!winner}, loser=${!!loser}`);
             return {
+                winnerId,
+                loserId,
                 winnerXpGained: 0,
                 loserXpGained: 0,
                 winnerLeveledUp: false,
@@ -97,6 +99,8 @@ async function awardMatchXP(winnerId, loserId) {
         logger.info(`XP awarded: Winner(${winnerId}) +${winnerXp}XP → Lv${winnerResult.newLevel}, Loser(${loserId}) +${loserXp}XP → Lv${loserResult.newLevel}`);
 
         return {
+            winnerId,
+            loserId,
             winnerXpGained: winnerXp,
             loserXpGained: loserXp,
             winnerLeveledUp: winnerResult.leveledUp,
@@ -113,6 +117,8 @@ async function awardMatchXP(winnerId, loserId) {
     } catch (error) {
         logger.error(`Error awarding XP: ${error.message}`);
         return {
+            winnerId,
+            loserId,
             winnerXpGained: 0,
             loserXpGained: 0,
             winnerLeveledUp: false,

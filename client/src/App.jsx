@@ -150,6 +150,15 @@ const App = () => {
             });
         });
 
+        newSocket.on('powerExpired', ({ userId, power }) => {
+            setGameState(prev => {
+                const players = [...prev.players];
+                const target = players.find(p => p.id === userId);
+                if (target) target.activePower = null;
+                return { ...prev, players };
+            });
+        });
+
         newSocket.on('powerChosen', ({ userId, power }) => {
             setGameState(prev => {
                 const players = [...prev.players];
@@ -191,12 +200,14 @@ const App = () => {
             }
         });
 
-        newSocket.on('playerHit', ({ targetId, newHp }) => {
+        newSocket.on('playerHit', ({ targetId, newHp, reason }) => {
             setGameState(prev => {
                 const players = [...prev.players];
                 const target = players.find(p => p.id === targetId);
                 if (target) {
-                    triggerFloatingText(target.pos.x, target.pos.y, newHp === 0 ? 'DEFEATED' : '-HIT');
+                    let text = newHp === 0 ? 'DEFEATED' : '-HIT';
+                    if (reason === 'heal') text = '+HEAL';
+                    triggerFloatingText(target.pos.x, target.pos.y, text);
                     target.hp = newHp;
                 }
                 return { ...prev, players };
@@ -230,7 +241,7 @@ const App = () => {
             // Update local mock profile stats based on outcome
             setMyProfile(prev => {
                 if (!prev) return prev;
-                const isWinner = xpDetails.winnerXpGained > 0 && matchResult !== 'loss'; // rough check
+                const isWinner = xpDetails.winnerId === myPlayerId;
                 return {
                     ...prev,
                     gamesPlayed: (prev.gamesPlayed || 0) + 1,
@@ -248,7 +259,7 @@ const App = () => {
         });
 
         return () => newSocket.close();
-    }, [myPlayerId, matchResult]);
+    }, [myPlayerId]);
 
 
     // Timer countdown local loop

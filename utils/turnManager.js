@@ -131,10 +131,12 @@ class TurnManager {
             }
 
             let alivePlayers = [];
+            let hpMap = new Map();
             // 3. Auto-Death Check
             for (const p of room.players) {
                 const pState = await PlayerState.findById(p.playerState._id);
                 if (pState.hp > 0) {
+                    hpMap.set(p.user.toString(), pState.hp);
                     const outOfBounds = pState.position.x < room.safeZone.minX || pState.position.x > room.safeZone.maxX || pState.position.y < room.safeZone.minY || pState.position.y > room.safeZone.maxY;
                     if (outOfBounds) {
                         pState.hp = 0;
@@ -176,7 +178,21 @@ class TurnManager {
             // 4. Game Over evaluation
             if (alivePlayers.length <= 1) {
                 room.status = 'finished';
-                const winnerId = alivePlayers.length === 1 ? alivePlayers[0] : null;
+                let winnerId = alivePlayers.length === 1 ? alivePlayers[0] : null;
+                
+                if (alivePlayers.length === 0 && hpMap.size > 0) {
+                    let bestUserId = null;
+                    let bestHp = -1;
+                    for (const [uid, hp] of hpMap.entries()) {
+                        if (hp > bestHp) {
+                            bestHp = hp;
+                            bestUserId = uid;
+                        } else if (hp === bestHp) {
+                            bestUserId = null; // tie, no winner
+                        }
+                    }
+                    winnerId = bestUserId;
+                }
                 room.winner = winnerId;
                 await room.save();
                 this.clearTurnTimer(room.roomId);

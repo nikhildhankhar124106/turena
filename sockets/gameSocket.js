@@ -223,6 +223,7 @@ const initSocket = (io) => {
                     
                     if (playerState.activePower === 'high_jump') {
                         playerState.activePower = null; // Expires after one use
+                        io.to(roomId).emit('powerExpired', { userId: userId, power: 'high_jump' });
                     }
 
                     // Mystery Box Pickup
@@ -230,6 +231,7 @@ const initSocket = (io) => {
                         const collectedPower = room.mysteryBox.powerType;
                         if (collectedPower === 'health_kit') {
                             playerState.hp = 100; // Insta heal
+                            io.to(roomId).emit('playerHit', { targetId: userId, newHp: 100, reason: 'heal' });
                         } else {
                             playerState.activePower = collectedPower;
                             playerState.activePowerTurnsLeft = 3;
@@ -250,6 +252,7 @@ const initSocket = (io) => {
                     if (playerState.activePower === 'sniper') {
                         isSniperShot = true;
                         playerState.activePower = null; // Expires after one use
+                        io.to(roomId).emit('powerExpired', { userId: userId, power: 'sniper' });
                         await playerState.save();
                     }
 
@@ -267,6 +270,7 @@ const initSocket = (io) => {
                         if (opponentState.activePower === 'bullet_vest') {
                             damage = 10;
                             opponentState.activePower = null; // Expires after absorbing a hit
+                            io.to(roomId).emit('powerExpired', { userId: opponentRecord.user.toString(), power: 'bullet_vest' });
                         }
 
                         opponentState.hp = Math.max(0, opponentState.hp - damage);
@@ -340,6 +344,7 @@ const initSocket = (io) => {
                             await playerState.save();
                             await room.save();
                             placedWalls.forEach(w => io.to(roomId).emit('wallCreated', w));
+                            io.to(roomId).emit('powerExpired', { userId: userId, power: 'create_wall' });
                         } else {
                             return socket.emit('gameError', { message: 'Cannot place wall here.' });
                         }
