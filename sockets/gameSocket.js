@@ -7,6 +7,8 @@ const PlayerState = require('../models/PlayerState');
 const User = require('../models/User');
 const MatchHistory = require('../models/MatchHistory');
 
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config/env');
 const turnManager = require('../utils/turnManager');
 const matchmaking = require('./matchmaking');
 const xpManager = require('../utils/xpManager');
@@ -17,25 +19,43 @@ const { validateMove, validateAttack } = require('../utils/gameLogic');
  * @param {import('socket.io').Server} io
  */
 const initSocket = (io) => {
+    // Socket authentication middleware
+    io.use((socket, next) => {
+        const token = socket.handshake.auth?.token;
+        if (!token) {
+            return next(new Error('Authentication error: No token provided'));
+        }
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            socket.userId = decoded.id;
+            next();
+        } catch (err) {
+            return next(new Error('Authentication error: Invalid token'));
+        }
+    });
+
     // Start the matchmaking loop for this server instance
     matchmaking.start(io);
 
     io.on('connection', (socket) => {
-        logger.info(` Socket connected: ${socket.id}`);
+        logger.info(` Socket connected: ${socket.id} (User: ${socket.userId})`);
 
         // ── Matchmaking Queue ─────────────────────────────────────────────
-        socket.on('joinQueue', ({ userId }) => {
+        socket.on('joinQueue', () => {
+            const userId = socket.userId;
             if (!userId) return socket.emit('gameError', { message: 'User ID required' });
             matchmaking.addToQueue(socket, userId);
         });
 
-        socket.on('leaveQueue', ({ userId }) => {
+        socket.on('leaveQueue', () => {
+            const userId = socket.userId;
             if (!userId) return;
             matchmaking.removeFromQueue(userId);
         });
 
         // ── Create a game room ────────────────────────────────────────────
-        socket.on('createRoom', async ({ userId }) => {
+        socket.on('createRoom', async () => {
+            const userId = socket.userId;
             try {
                 if (!userId) {
                     return socket.emit('gameError', { message: 'User ID is required to create a room' });
@@ -78,7 +98,8 @@ const initSocket = (io) => {
         });
 
         // ── Join a game room ──────────────────────────────────────────────
-        socket.on('joinRoom', async ({ roomId, userId }) => {
+        socket.on('joinRoom', async ({ roomId }) => {
+            const userId = socket.userId;
             try {
                 if (!roomId || !userId) {
                     return socket.emit('gameError', { message: 'roomId and userId are required' });
@@ -162,7 +183,8 @@ const initSocket = (io) => {
         });
 
         // ── Handle a move/action ───────────────────────────────────────────────
-        socket.on('makeMove', async ({ roomId, userId, x, y, action }) => {
+        socket.on('makeMove', async ({ roomId, x, y, action }) => {
+            const userId = socket.userId;
             try {
                 logger.info(`Action '${action}' in ${roomId} by ${userId} to (${x},${y})`);
 
@@ -343,7 +365,8 @@ const initSocket = (io) => {
         });
 
         // ── Choose Initial Power ──────────────────────────────────────────────
-        socket.on('chooseInitialPower', async ({ roomId, userId, power }) => {
+        socket.on('chooseInitialPower', async ({ roomId, power }) => {
+            const userId = socket.userId;
             try {
                 const room = await GameRoom.findOne({ roomId }).populate('players.playerState');
                 if (!room || room.status !== 'playing') {
@@ -364,7 +387,8 @@ const initSocket = (io) => {
         });
 
         // ── Leave a game room ───────────────────────────────────────────
-        socket.on('leaveRoom', ({ roomId, userId }) => {
+        socket.on('leaveRoom', ({ roomId }) => {
+            const userId = socket.userId;
             socket.leave(roomId);
             turnManager.clearTurnTimer(roomId); // Note: Should probably check if game is entirely empty or handle properly but skipping for now
             logger.info(`User ${userId} left room ${roomId}`);

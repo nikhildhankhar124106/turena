@@ -3,39 +3,18 @@ import { io } from 'socket.io-client';
 import Grid from './components/Grid';
 import ProfileCard from './components/ProfileCard';
 import MatchmakingScreen from './components/MatchmakingScreen';
+import AuthScreen from './components/AuthScreen';
+
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
-const generateFakeId = () => {
-    const chars = 'abcdef0123456789';
-    return Array.from({ length: 24 }).map(() => chars[Math.floor(Math.random() * 16)]).join('');
-};
-
 const App = () => {
-    // Generate valid MongoDB ObjectId string for testing
-    const [myPlayerId, setMyPlayerId] = useState(() => {
-        const stored = sessionStorage.getItem('turenaUserId');
-        if (stored) return stored;
-        const newId = generateFakeId();
-        sessionStorage.setItem('turenaUserId', newId);
-        return newId;
-    });
-
-    // Mock profile since we don't have login yet
-    const [myProfile, setMyProfile] = useState({
-        username: 'Player ' + myPlayerId.substring(0,4),
-        level: 1,
-        xp: 0,
-        xpToNextLvl: 100,
-        title: 'Recruit',
-        gamesPlayed: 0,
-        winCount: 0
-    });
-
+    const [myPlayerId, setMyPlayerId] = useState(null);
+    const [myProfile, setMyProfile] = useState(null);
     const [socket, setSocket] = useState(null);
 
-    // View states: 'lobby', 'queue', 'waiting', 'game'
-    const [view, setView] = useState('lobby');
+    // View states: 'auth', 'lobby', 'queue', 'waiting', 'game'
+    const [view, setView] = useState('auth');
     const [roomIdInput, setRoomIdInput] = useState('');
     const [currentRoom, setCurrentRoom] = useState(null);
 
@@ -60,9 +39,55 @@ const App = () => {
 
     const [powerMode, setPowerMode] = useState(false);
 
+    // --- Auth & Profile Initialization ---
+    useEffect(() => {
+        const token = localStorage.getItem('turenaToken');
+        if (token) {
+            fetchProfile(token);
+        }
+    }, []);
+
+    const fetchProfile = async (token) => {
+        try {
+            const res = await fetch(`${SERVER_URL}/api/auth/me`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const data = await res.json();
+            if (data.success) {
+                handleAuthSuccess(data.data);
+            } else {
+                localStorage.removeItem('turenaToken');
+            }
+        } catch (err) {
+            console.error('Failed to fetch profile', err);
+        }
+    };
+
+    const handleAuthSuccess = (userData) => {
+        setMyPlayerId(userData._id);
+        setMyProfile(userData);
+        setView('lobby');
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('turenaToken');
+        if (socket) socket.disconnect();
+        setSocket(null);
+        setMyPlayerId(null);
+        setMyProfile(null);
+        setView('auth');
+    };
+
     // --- Socket Initialization ---
     useEffect(() => {
-        const newSocket = io(SERVER_URL);
+        if (view === 'auth' || !myPlayerId) return;
+        const token = localStorage.getItem('turenaToken');
+        
+        const newSocket = io(SERVER_URL, {
+            auth: { token }
+        });
         setSocket(newSocket);
 
         newSocket.on('connect', () => console.log('Connected to Server'));
@@ -318,9 +343,19 @@ const App = () => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', padding: '20px' }}>
+            {/* ── Auth View ── */}
+            {view === 'auth' && (
+                <AuthScreen onAuthSuccess={handleAuthSuccess} />
+            )}
+
             {/* ── Lobby View ── */}
-            {view === 'lobby' && (
+            {view === 'lobby' && myProfile && (
                 <div style={{ width: '100%', maxWidth: '900px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+                        <button onClick={handleLogout} style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', padding: '5px 15px', borderRadius: '6px', cursor: 'pointer' }}>
+                            Logout
+                        </button>
+                    </div>
                     <div style={{ marginBottom: '30px', textAlign: 'center' }}>
                         <h1 style={{ fontSize: '42px', margin: '0 0 10px 0', textShadow: '0 0 20px rgba(56,189,248,0.5)' }}>TURENA ARENA</h1>
                         <p style={{ color: '#9ca3af' }}>Multiplayer Tactical Grid Combat</p>
