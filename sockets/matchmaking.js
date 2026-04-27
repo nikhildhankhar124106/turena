@@ -100,19 +100,21 @@ class Matchmaking {
      * Get the allowed level range based on wait time.
      */
     getAllowedRange(waitTimeMs) {
-        if (waitTimeMs >= 30000) return Infinity;  // Match with anyone
-        if (waitTimeMs >= 20000) return 10;
-        if (waitTimeMs >= 10000) return 5;
-        return 2;
+        if (waitTimeMs >= 20000) return Infinity;  // Match with anyone
+        if (waitTimeMs >= 15000) return 5;
+        if (waitTimeMs >= 10000) return 2;
+        if (waitTimeMs >= 5000) return 1;
+        return 0; // strict exact match initially
     }
 
     /**
      * Get a warning message for wait time thresholds.
      */
     getWarningForWaitTime(waitTimeMs) {
-        if (waitTimeMs >= 30000) return { message: 'Matching with any available player...', expandedRange: 'ANY' };
-        if (waitTimeMs >= 20000) return { message: 'Expanding search to much wider level range...', expandedRange: '±10' };
-        if (waitTimeMs >= 10000) return { message: 'Expanding search to wider level range...', expandedRange: '±5' };
+        if (waitTimeMs >= 20000) return { message: 'Matching with any available player...', expandedRange: 'ANY' };
+        if (waitTimeMs >= 15000) return { message: 'Expanding search to much wider level range...', expandedRange: '±5' };
+        if (waitTimeMs >= 10000) return { message: 'Expanding search to wider level range...', expandedRange: '±2' };
+        if (waitTimeMs >= 5000) return { message: 'Could not find exact match. Expanding search...', expandedRange: '±1' };
         return null;
     }
 

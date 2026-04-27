@@ -19,8 +19,12 @@ function getTitleForLevel(level) {
  * @returns {{ winnerXp: number, loserXp: number }}
  */
 function calculateXP(winnerLevel, loserLevel) {
-    const winnerXp = 50;
-    const loserXp = 10;
+    let winnerXp = 50 + ((loserLevel - winnerLevel) * 5);
+    let loserXp = 10 + ((winnerLevel - loserLevel) * 2);
+    
+    winnerXp = Math.max(20, Math.min(winnerXp, 100));
+    loserXp = Math.max(0, Math.min(loserXp, 25));
+    
     return { winnerXp, loserXp };
 }
 
