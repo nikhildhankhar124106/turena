@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 
 const MatchmakingScreen = ({ queueData = {}, onCancel }) => {
     const { position, waitTime = 0, queueSize = 1, expandedRangeMessage } = queueData;
+    const [localTime, setLocalTime] = useState(waitTime);
+
+    useEffect(() => {
+        setLocalTime(waitTime);
+    }, [waitTime]);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setLocalTime(prev => prev + 1);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
     
     // Format mm:ss
     const formatTime = (seconds) => {
@@ -19,7 +31,7 @@ const MatchmakingScreen = ({ queueData = {}, onCancel }) => {
             </div>
 
             <h2 className="matchmaking-title">Searching for Online Opponent</h2>
-            <div className="matchmaking-timer">{formatTime(waitTime)}</div>
+            <div className="matchmaking-timer">{formatTime(localTime)}</div>
 
             <div className="matchmaking-stats">
                 <div className="mm-stat">
