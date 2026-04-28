@@ -394,18 +394,101 @@ const initSocket = (io) => {
         });
 
         // ── Leave a game room ───────────────────────────────────────────
-        socket.on('leaveRoom', ({ roomId }) => {
+        socket.on('leaveRoom', async ({ roomId }) => {
             const userId = socket.userId;
+            
+            try {
+                const room = await GameRoom.findOne({ roomId }).populate('players.playerState');
+                if (room && room.status === 'playing') {
+                    // Find the opponent
+                    const opponentRecord = room.players.find(p => p.user.toString() !== userId);
+                    if (opponentRecord) {
+                        const opponentId = opponentRecord.user.toString();
+                        
+                        room.status = 'finished';
+                        room.winner = opponentId;
+                        await room.save();
+                        turnManager.clearTurnTimer(roomId);
+                        
+                        // Award XP
+                        const durationSeconds = Math.floor((Date.now() - new Date(room.createdAt).getTime()) / 1000);
+                        const xpDetails = await xpManager.awardMatchXP(opponentId, userId);
+                        
+                        const matchHistory = new MatchHistory({
+                            roomId: room.roomId,
+                            players: room.players.map(p => p.user),
+                            winner: opponentId,
+                            durationSeconds,
+                            totalTurns: room.turnNumber || 1,
+                            endedAt: new Date(),
+                            winnerXpGained: xpDetails.winnerXpGained,
+                            loserXpGained: xpDetails.loserXpGained,
+                            winnerLevel: xpDetails.winnerLevel,
+                            loserLevel: xpDetails.loserLevel
+                        });
+                        await matchHistory.save().catch(err => logger.error('Error saving match history', err));
+
+                        // Broadcast to the opponent (who is still in the room)
+                        io.to(roomId).emit('gameOver', { winner: opponentId, reason: 'Opponent surrendered' });
+                        io.to(roomId).emit('xpAwarded', xpDetails);
+                    }
+                }
+            } catch (err) {
+                logger.error(`Error handling leaveRoom: ${err.message}`);
+            }
+
             socket.leave(roomId);
-            turnManager.clearTurnTimer(roomId); // Note: Should probably check if game is entirely empty or handle properly but skipping for now
             logger.info(`User ${userId} left room ${roomId}`);
             socket.to(roomId).emit('playerLeft', { userId });
         });
 
         // ── Disconnect ──────────────────────────────────────────────────
-        socket.on('disconnect', () => {
+        socket.on('disconnect', async () => {
             logger.info(` Socket disconnected: ${socket.id}`);
             matchmaking.removeBySocketId(socket.id);
+            
+            const userId = socket.userId;
+            if (!userId) return;
+
+            try {
+                // Check if user was in a playing room
+                const room = await GameRoom.findOne({ 'players.user': userId, status: 'playing' }).populate('players.playerState');
+                if (room) {
+                    const opponentRecord = room.players.find(p => p.user.toString() !== userId);
+                    if (opponentRecord) {
+                        const opponentId = opponentRecord.user.toString();
+                        
+                        room.status = 'finished';
+                        room.winner = opponentId;
+                        await room.save();
+                        turnManager.clearTurnTimer(room.roomId);
+                        
+                        // Award XP
+                        const durationSeconds = Math.floor((Date.now() - new Date(room.createdAt).getTime()) / 1000);
+                        const xpDetails = await xpManager.awardMatchXP(opponentId, userId);
+                        
+                        const matchHistory = new MatchHistory({
+                            roomId: room.roomId,
+                            players: room.players.map(p => p.user),
+                            winner: opponentId,
+                            durationSeconds,
+                            totalTurns: room.turnNumber || 1,
+                            endedAt: new Date(),
+                            winnerXpGained: xpDetails.winnerXpGained,
+                            loserXpGained: xpDetails.loserXpGained,
+                            winnerLevel: xpDetails.winnerLevel,
+                            loserLevel: xpDetails.loserLevel
+                        });
+                        await matchHistory.save().catch(err => logger.error('Error saving match history on disconnect', err));
+
+                        // Broadcast to the opponent
+                        io.to(room.roomId).emit('gameOver', { winner: opponentId, reason: 'Opponent disconnected' });
+                        io.to(room.roomId).emit('xpAwarded', xpDetails);
+                    }
+                }
+            } catch (err) {
+                logger.error(`Error handling disconnect: ${err.message}`);
+            }
         });
     });
 };
