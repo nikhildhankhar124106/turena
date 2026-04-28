@@ -38,6 +38,7 @@ const App = () => {
     });
 
     const [powerMode, setPowerMode] = useState(false);
+    const [hasChosenPower, setHasChosenPower] = useState(false);
 
     // --- Auth & Profile Initialization ---
     useEffect(() => {
@@ -130,6 +131,7 @@ const App = () => {
             setView('game');
             setMatchResult(null);
             setXpResult(null);
+            setHasChosenPower(false);
             mapServerStateToFrontend(gameRoom);
         });
 
@@ -330,6 +332,7 @@ const App = () => {
         setXpResult(null);
         setCurrentRoom(null);
         setOpponentInfo(null);
+        setHasChosenPower(false);
         setView('lobby');
         setGameState({ currentTurn: null, players: [] });
         setTimeLeft(30);
@@ -357,10 +360,11 @@ const App = () => {
     const isMyTurn = gameState.currentTurn === myPlayerId;
     const progressPercent = (timeLeft / 30) * 100;
     const isUrgent = timeLeft <= 5;
-    const needsStartingPowerChoice = view === 'game' && gameState.turnNumber <= 2 && myPlayer && myPlayer.activePower === null;
+    const needsStartingPowerChoice = view === 'game' && gameState.turnNumber <= 2 && myPlayer && myPlayer.activePower === null && !hasChosenPower;
 
     const selectStartingPower = (power) => {
         socket.emit('chooseInitialPower', { roomId: currentRoom, userId: myPlayerId, power });
+        setHasChosenPower(true);
     };
 
     return (

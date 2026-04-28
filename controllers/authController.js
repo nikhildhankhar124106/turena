@@ -43,6 +43,13 @@ exports.register = async (req, res, next) => {
                     _id: user._id,
                     username: user.username,
                     email: user.email,
+                    xp: user.xp,
+                    level: user.level,
+                    xpToNextLvl: user.xpToNextLvl,
+                    title: user.title,
+                    gamesPlayed: user.gamesPlayed,
+                    winCount: user.winCount,
+                    lossCount: user.lossCount,
                     token: generateToken(user._id)
                 },
             });
@@ -79,6 +86,13 @@ exports.login = async (req, res, next) => {
                 _id: user._id,
                 username: user.username,
                 email: user.email,
+                xp: user.xp,
+                level: user.level,
+                xpToNextLvl: user.xpToNextLvl,
+                title: user.title,
+                gamesPlayed: user.gamesPlayed,
+                winCount: user.winCount,
+                lossCount: user.lossCount,
                 token: generateToken(user._id)
             },
         });
