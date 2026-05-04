@@ -34,7 +34,7 @@ class Matchmaking {
     /**
      * Add a player to the queue.
      */
-    async addToQueue(socket, userId) {
+    async addToQueue(socket, userId, providedEnqueuedAt = null) {
         // Remove duplicate entries
         this.removeFromQueue(userId);
 
@@ -54,13 +54,22 @@ class Matchmaking {
             logger.warn(`Could not fetch user ${userId} for matchmaking, using defaults`);
         }
 
+        // Validate providedEnqueuedAt (must be in the past, but not older than 1 hour to prevent abuse)
+        let enqueuedAt = Date.now();
+        if (providedEnqueuedAt) {
+            const age = Date.now() - providedEnqueuedAt;
+            if (age > 0 && age < 3600000) {
+                enqueuedAt = providedEnqueuedAt;
+            }
+        }
+
         const entry = {
             socketId: socket.id,
             userId,
             level,
             username,
             title,
-            enqueuedAt: Date.now()
+            enqueuedAt
         };
 
         this.queue.push(entry);
@@ -70,7 +79,8 @@ class Matchmaking {
             position: this.queue.length,
             level,
             username,
-            title
+            title,
+            waitTime: Math.floor((Date.now() - enqueuedAt) / 1000)
         });
     }
 

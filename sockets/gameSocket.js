@@ -41,10 +41,11 @@ const initSocket = (io) => {
         logger.info(` Socket connected: ${socket.id} (User: ${socket.userId})`);
 
         // ── Matchmaking Queue ─────────────────────────────────────────────
-        socket.on('joinQueue', () => {
+        socket.on('joinQueue', (data) => {
             const userId = socket.userId;
             if (!userId) return socket.emit('gameError', { message: 'User ID required' });
-            matchmaking.addToQueue(socket, userId);
+            const enqueuedAt = data ? data.enqueuedAt : null;
+            matchmaking.addToQueue(socket, userId, enqueuedAt);
         });
 
         socket.on('leaveQueue', () => {

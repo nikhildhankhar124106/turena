@@ -91,7 +91,13 @@ const App = () => {
         });
         setSocket(newSocket);
 
-        newSocket.on('connect', () => console.log('Connected to Server'));
+        newSocket.on('connect', () => {
+            console.log('Connected to Server');
+            const savedQueueTime = sessionStorage.getItem('turenaQueue');
+            if (savedQueueTime) {
+                newSocket.emit('joinQueue', { userId: myPlayerId, enqueuedAt: parseInt(savedQueueTime, 10) });
+            }
+        });
 
         // Matchmaking events
         newSocket.on('queueJoined', (data) => {
@@ -108,6 +114,7 @@ const App = () => {
         });
 
         newSocket.on('matchFound', ({ roomId, opponent }) => {
+            sessionStorage.removeItem('turenaQueue');
             setCurrentRoom(roomId);
             setOpponentInfo(opponent);
             setView('waiting'); // Brief transition before gameStarts
@@ -341,7 +348,9 @@ const App = () => {
     const handleJoinQueue = () => {
         if (socket) {
             setQueueData({ waitTime: 0 }); // reset
-            socket.emit('joinQueue', { userId: myPlayerId });
+            const now = Date.now();
+            sessionStorage.setItem('turenaQueue', now.toString());
+            socket.emit('joinQueue', { userId: myPlayerId, enqueuedAt: now });
         }
     };
 
@@ -350,6 +359,7 @@ const App = () => {
             socket.emit('leaveQueue', { userId: myPlayerId });
             setView('lobby');
             setQueueData({});
+            sessionStorage.removeItem('turenaQueue');
         }
     };
 
